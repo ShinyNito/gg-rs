@@ -1,6 +1,6 @@
 [package]
 name = "gg-rs"
-version = "0.1.1"
+version = "0.1.2"
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
@@ -8,6 +8,7 @@ edition = "2021"
 [dependencies]
 byteorder = "1.5.0"
 clap = { version = "4.5.3", features=["cargo"]}
+dashmap = "5.5.3"
 hickory-proto = "0.24.0"
 ipnetwork = "0.20.0"
 lazy_static = "1.4.0"

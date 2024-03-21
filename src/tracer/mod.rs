@@ -1,3 +1,4 @@
+use dashmap::DashMap;
 use ipnetwork::{IpNetwork, Ipv4Network};
 use lazy_static::lazy_static;
 use nix::{
@@ -11,7 +12,6 @@ use nix::{
     unistd::Pid,
 };
 use std::{
-    collections::HashMap,
     ffi::c_void,
     net::{IpAddr, Ipv4Addr, Ipv6Addr},
     sync::Arc,
@@ -19,7 +19,7 @@ use std::{
 };
 use tokio::{
     process::Command,
-    sync::{mpsc, Mutex, RwLock},
+    sync::{mpsc, Mutex},
 };
 use tracing::{error, trace};
 use zerocopy::{AsBytes, FromBytes, Ref};
@@ -107,9 +107,9 @@ fn is_entry_stop(regs: user_regs_struct) -> bool {
 
 #[inline]
 fn return_value_int(regs: user_regs_struct) -> Result<(i32, i32), nix::Error> {
-    let rax_i32 = regs.rax as i32; 
+    let rax_i32 = regs.rax as i32;
     if rax_i32 < 0 {
-        let errno = -rax_i32; 
+        let errno = -rax_i32;
         Err(nix::Error::from_raw(errno))
     } else {
         Ok((rax_i32, 0))
@@ -258,7 +258,7 @@ fn inst(regs: user_regs_struct) -> i32 {
 
 pub struct Tracer {
     pub process_info: Arc<Mutex<Command>>,
-    pub socket_info: Arc<RwLock<HashMap<i32, HashMap<i32, SocketMetadata>>>>,
+    pub socket_info: Arc<DashMap<i32, DashMap<i32, SocketMetadata>>>,
     pub store_house: Arc<Storehouse>,
     pub proxy: Arc<Proxy>,
 }
@@ -271,7 +271,7 @@ impl Tracer {
         let proxy = Proxy::new(socks5_port);
         let t = Tracer {
             process_info: Arc::new(Mutex::new(command)),
-            socket_info: Arc::new(RwLock::new(HashMap::new())),
+            socket_info: Arc::new(DashMap::new()),
             proxy: Arc::new(proxy),
             store_house: Arc::new(Storehouse::new()),
         };
@@ -413,8 +413,7 @@ impl Tracer {
     }
 
     pub async fn get_socket_info(&self, pid: i32, socket_fd: i32) -> Option<SocketMetadata> {
-        let socket_info = self.socket_info.read().await;
-        match socket_info.get(&pid) {
+        match self.socket_info.get(&pid) {
             Some(socket_info_entry) => match socket_info_entry.get(&socket_fd) {
                 Some(socket_info) => Some(socket_info.clone()),
                 None => None,
@@ -424,44 +423,37 @@ impl Tracer {
     }
 
     async fn save_socket_info(&self, pid: i32, socket_fd: i32, metadata: SocketMetadata) {
-        let mut socket_info = self.socket_info.write().await;
-        let socket_info_entry = socket_info.entry(pid).or_insert_with(HashMap::new);
+        let socket_info_entry = self.socket_info.entry(pid).or_insert_with(DashMap::new);
         socket_info_entry.insert(socket_fd, metadata.clone());
     }
 
     async fn check_socket(&self, pid: i32, fd: i32) -> (Option<SocketMetadata>, bool) {
         let socket_info = self.get_socket_info(pid, fd).await;
         match socket_info {
-            Some(info) => {
-                match info.family {
-                    libc::AF_INET | libc::AF_INET6 => {
-                        match info.network() {
-                            "tcp" | "udp" => (Some(info), true),
-                            _ => (None, false),
-                        }
-                    }
+            Some(info) => match info.family {
+                libc::AF_INET | libc::AF_INET6 => match info.network() {
+                    "tcp" | "udp" => (Some(info), true),
                     _ => (None, false),
-                }
-            }
+                },
+                _ => (None, false),
+            },
             None => (None, false),
         }
     }
 
     async fn remove_socket_info(&self, pid: i32, socket_fd: i32) {
-        let mut socket_info = self.socket_info.write().await;
-        if let Some(sockets) = socket_info.get_mut(&pid) {
+        if let Some(sockets) = self.socket_info.get_mut(&pid) {
             sockets.remove(&socket_fd);
             if sockets.is_empty() {
-                socket_info.remove(&pid);
+                self.socket_info.remove(&pid);
             }
         }
     }
 
     async fn remove_process_socket_info(&self, pid: i32) {
-        let mut socket_info = self.socket_info.write().await;
-        if let Some(sockets) = socket_info.get(&pid) {
+        if let Some(sockets) = self.socket_info.get(&pid) {
             if sockets.is_empty() {
-                socket_info.remove(&pid);
+                self.socket_info.remove(&pid);
             }
         }
     }
@@ -490,7 +482,6 @@ impl Tracer {
         let network: &str = socket_info.network();
         let port_hack_to: u16 = self.port_hack_to(socket_info);
 
-       
         let addr = RawSockaddrInet4::mut_from(b_sock_addr)
             .ok_or_else(|| "Invalid RawSockaddrInet4".to_string())?;
         let target_port = u16::from_be_bytes(addr.port);
@@ -607,7 +598,7 @@ impl Tracer {
                         return;
                     }
                 }
-                let mut b_sockaddr = vec![0u8; sock_addr_len as usize]; 
+                let mut b_sockaddr = vec![0u8; sock_addr_len as usize];
                 match read_sockaddr(pid, p_sock_addr, &mut b_sockaddr) {
                     Err(_e) => {
                         return;

@@ -1,27 +1,24 @@
-use std::collections::HashMap;
 use std::net::IpAddr;
 use std::sync::Arc;
 
-use tokio::sync::Mutex;
+use dashmap::DashMap;
 
 pub struct RealIPMapper {
-    mapper: Arc<Mutex<HashMap<IpAddr, IpAddr>>>,
+    mapper: Arc<DashMap<IpAddr, IpAddr>>,
 }
 
 impl RealIPMapper {
     pub fn new() -> Self {
         Self {
-            mapper: Arc::new(Mutex::new(HashMap::new())),
+            mapper: Arc::new(DashMap::new()),
         }
     }
 
     pub async fn set(&self, loopback: IpAddr, real: IpAddr) {
-        let mut mapper = self.mapper.lock().await;
-        mapper.insert(loopback, real);
+        self.mapper.insert(loopback, real);
     }
 
     pub async fn get(&self, loopback: IpAddr) -> Option<IpAddr> {
-        let mapper = self.mapper.lock().await;
-        mapper.get(&loopback).cloned()
+        self.mapper.get(&loopback).map(|entry| *entry.value())
     }
 }
