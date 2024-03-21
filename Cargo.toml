@@ -1,0 +1,28 @@
+[package]
+name = "gg-rs"
+version = "0.1.1"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+byteorder = "1.5.0"
+clap = { version = "4.5.3", features=["cargo"]}
+hickory-proto = "0.24.0"
+ipnetwork = "0.20.0"
+lazy_static = "1.4.0"
+nix =  { version = "0.28.0", features = ["process", "signal", "ptrace"] }
+realm_io = {version= "0.4.0", features = ["brutal-shutdown"]}
+shadowsocks = {version="1.18.1", default-features = false}
+socket2 = "0.5.6"
+tokio = { version = "1", features = ["rt", "signal", "rt-multi-thread", "sync", "macros", "process", "net", "io-util"] }
+tracing = "0.1.40"
+tracing-appender = "0.2.3"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+zerocopy = "0.7.32"
+zerocopy-derive = "0.7.32"
+
+
+[profile.release]
+lto = true
+opt-level = 3
