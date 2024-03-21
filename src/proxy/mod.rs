@@ -100,7 +100,7 @@ impl Proxy {
                 let udp_socket_guard = proxy.udp_listener.get().unwrap();
                 let proxy_buf = vec![0u8; 65535];
                 loop {
-                    let mut buf = vec![0u8; 4096];
+                    let mut buf = vec![0u8; 65535];
                     match udp_socket_guard.recv_from(&mut buf).await {
                         Ok((size, src)) => {
                             let proxy_clone = Arc::clone(&proxy);

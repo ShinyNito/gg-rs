@@ -1,10 +1,11 @@
 use std::{net::SocketAddr, sync::Arc};
 
 use shadowsocks::{
-    context::Context, relay::tcprelay::utils::copy_encrypted_bidirectional, ProxyClientStream, ServerConfig,
+    context::Context, relay::tcprelay::utils::copy_bidirectional, ProxyClientStream,
+    ServerConfig,
 };
 use tokio::net::TcpStream;
-use tracing::{error, info};
+use tracing::{error, trace};
 
 use super::Proxy;
 
@@ -47,12 +48,9 @@ impl Proxy {
             }
         };
         let target_addr = (host, port);
-        
 
         let mut connect_opts = shadowsocks::net::ConnectOpts::default();
         connect_opts.tcp.nodelay = true;
-        connect_opts.tcp.mptcp = true;
-        connect_opts.tcp.fastopen = true;
 
         let mut remote = match ProxyClientStream::connect_with_opts(
             context,
@@ -68,13 +66,13 @@ impl Proxy {
                 return;
             }
         };
-        
-        match copy_encrypted_bidirectional(svr_cfg.method(),  &mut remote,&mut stream ).await {
+
+        match copy_bidirectional(&mut remote, &mut stream).await {
             Ok(_) => {
-                info!("{} <-> {} closed", src, target);
+                trace!("{} <-> {} closed", src, target);
             }
             Err(err) => {
-                error!("{} <-> {} closed with error: {}", src, target, err);
+                trace!("{} <-> {} closed with error: {}", src, target, err);
             }
         }
     }
